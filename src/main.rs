@@ -1,6 +1,6 @@
 use anyhow::Result;
 use log::{debug, info};
-use std::env::args;
+use std::{env::args, thread};
 
 slint::include_modules!();
 
@@ -41,10 +41,15 @@ fn main() -> Result<()> {
     if !initial_search.is_empty() {
         ui.set_input_text(initial_search.clone().into());
 
-        match fetch_translation(&initial_search) {
-            Ok(result) => ui.set_translation(result.into()),
-            Err(e) => ui.set_translation(format!("Error: {e}").into()),
-        }
+        let ui_weak = ui.as_weak();
+        thread::spawn(move || match fetch_translation(&initial_search) {
+            Ok(result) => ui_weak.upgrade_in_event_loop(move |ui| {
+                ui.set_translation(result.into());
+            }),
+            Err(e) => ui_weak.upgrade_in_event_loop(move |ui| {
+                ui.set_translation(format!("Error: {e}").into());
+            }),
+        });
     }
 
     ui.run()?;
